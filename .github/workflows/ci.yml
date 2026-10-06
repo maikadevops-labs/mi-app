@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write 
 
 jobs:
   test:
@@ -24,3 +25,27 @@ jobs:
 
       - name: Correr tests
         run: pytest -q
+
+      - name: Pipeline Doctor, huella
+        if: always()          # también queremos la huella de los runs que fallan
+        continue-on-error: true
+        uses: maikadevops-labs/pipeline-doctor/huella@v0
+        with:
+          aws-role-arn: ${{ vars.PIPELINE_DOCTOR_ROLE_ARN }}
+          bucket: ${{ vars.PIPELINE_DOCTOR_BUCKET }}
+          job-status: ${{ job.status }}
+  doctor:
+    needs: [test]
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      actions: read          # leer el log del job que falló
+      contents: read         # comparar commits
+      pull-requests: write   # comentar en el PR
+    steps:
+      - uses: maikadevops-labs/pipeline-doctor/diagnostico@v0
+        with:
+          aws-role-arn: ${{ vars.PIPELINE_DOCTOR_ROLE_ARN }}
+          bucket: ${{ vars.PIPELINE_DOCTOR_BUCKET }}
+          bedrock-model-id: ${{ vars.PIPELINE_DOCTOR_MODEL_ID }}   # vacío = modo sin IA
